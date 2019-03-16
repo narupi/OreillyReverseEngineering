@@ -10,7 +10,8 @@ class debugger():
         self.debugger_active    =   False
         self.h_thread           =   None
         self.context            =   None
-        self.exception_address  =   None
+        self.software_breakpoints   =   {}
+
 
 
     def load(self, path_to_exe):
@@ -145,3 +146,52 @@ class debugger():
         print "[*] Inside the breakpoint handler."
         print "Exception Address: 0x%08x" % self.exception_address
         return DBG_CONTINUE
+
+
+    def read_process_memory(self,address,length):
+        data = ""
+        read_buf = create_string_buffer(length)
+        count = c_ulong(0)
+
+        if not kernel32.ReadProcessmemory(self.h_process,
+                                          address,
+                                          read_buf,
+                                          length,
+                                          byref(count)):
+            return False
+        else:
+            data += read_buf.raw
+            return data
+
+    def write_process_memory(self, address, data):
+        count = c_ulong(0)
+        length = len(data)
+        c_data = c_char_p(data[count.value:])
+
+        if not kernel32.WriteProcessMemory(self.h_process,
+                                           address,
+                                           c_data,
+                                           length,
+                                           byref(count)):
+            return False
+        
+        else:
+            return True
+
+    def bp_set_sw(self, address):
+        print"[*] Setting breakpoint at: 0x%08x" % address
+        if not self.software_breakpoints.has_key(address):
+            try:
+                original_byte = self.read_process_memory(address, 1)
+                self.write_process_memory(address, "\xCC")
+                self.software_breakpoints[address] = (original_byte)
+            except:
+                return False
+
+        return True
+    
+    def func_resolve(self, dll, function):
+        handle = kernel32.GetModuleHandleA(dll)
+        address = kernel32.GetProcAddress(handle, function)
+        kernel32.CloseHandle(handle)
+        return address
